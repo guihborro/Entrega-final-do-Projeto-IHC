@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Guia de Acessibilidade Colaborativo</title>
+
+<!-- React 18 via CDN -->
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+    background: linear-gradient(145deg, #0f172a, #1e293b);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 20px 16px;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+
+  textarea, input { font-family: inherit; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  .fade-in { animation: fadeIn 0.25s ease; }
+  .listening { animation: pulse 1s ease infinite; }
+
+  input:focus, textarea:focus {
+    outline: none;
+    border-color: #2563EB !important;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15) !important;
+  }
+
+  /* Mobile full-screen mode */
+  @media (max-width: 430px) {
+    body { padding: 0; background: #F0F7FF; }
+    #phone-frame {
+      width: 100% !important;
+      height: 100vh !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+    }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState } = React;
+
+/* ═══════════════════════════════════════════════════════════════════
+   DATA — Tags de acessibilidade
+═══════════════════════════════════════════════════════════════════ */
+const TAGS = {
+  rampa:          { label: 'Rampa de Acesso',    emoji: '♿', bg: '#EFF6FF', color: '#1D4ED8', border: '#BFDBFE' },
+  banheiro:       { label: 'Banheiro Adaptado',  emoji: '🚻', bg: '#F5F3FF', color: '#6D28D9', border: '#DDD6FE' },
+  piso_tatil:     { label: 'Piso Tátil',         emoji: '👣', bg: '#ECFDF5', color: '#065F46', border: '#A7F3D0' },
+  braille:        { label: 'Cardápio Braille',   emoji: '📖', bg: '#FFFBEB', color: '#92400E', border: '#FDE68A' },
+  libras:         { label: 'Atend. em Libras',   emoji: '🤟', bg: '#FFF1F2', color: '#9F1239', border: '#FECDD3' },
+  elevador:       { label: 'Elevador',           emoji: '🛗', bg: '#F0F9FF', color: '#075985', border: '#BAE6FD' },
+  estacionamento: { label: 'Vaga PcD',           emoji: '🅿️', bg: '#EEF2FF', color: '#3730A3', border: '#C7D2FE' },
+  audio:          { label: 'Audiodescrição',     emoji: '🔊', bg: '#FFF7ED', color: '#9A3412', border: '#FED7AA' },
+};
+
+const CATEGORIES = ['Todos', 'Restaurantes', 'Clínicas', 'Praças', 'Escolas'];
+
+/* ═══════════════════════════════════════════════════════════════════
+   DATA — Locais (mock)
+═══════════════════════════════════════════════════════════════════ */
+const INIT_PLACES = [
+  {
+    id: 1, name: 'Restaurante Sabor & Arte', cat: 'Restaurantes',
+    addr: 'Rua Augusta, 1250 — Consolação', dist: '350m',
+    rating: 4.7, n: 23, tags: ['rampa', 'banheiro', 'braille', 'libras'], emoji: '🍽️',
+    reviews: [
+      { id: 1, author: 'Carlos M.', av: 'CM', date: '2 sem. atrás', rating: 5,
+        tags: ['rampa', 'braille'],
+        comment: 'Excelente! O cardápio em Braille é impecável e a rampa de acesso é ampla e bem sinalizada. Minha filha cega conseguiu pedir sozinha pela primeira vez!' },
+      { id: 2, author: 'Ana Lima', av: 'AL', date: '1 mês atrás', rating: 4,
+        tags: ['banheiro', 'libras'],
+        comment: 'Banheiro adaptado bem espaçoso. O atendimento em Libras é básico mas funciona para o essencial.' },
+    ]
+  },
+  {
+    id: 2, name: 'Clínica Odonto Saúde', cat: 'Clínicas',
+    addr: 'Av. Paulista, 900 — Bela Vista', dist: '1,2km',
+    rating: 4.5, n: 11, tags: ['rampa', 'banheiro', 'elevador', 'estacionamento'], emoji: '🦷',
+    reviews: [
+      { id: 1, author: 'Roberto S.', av: 'RS', date: '3 sem. atrás', rating: 5,
+        tags: ['rampa', 'banheiro', 'elevador'],
+        comment: 'Fui de cadeira de rodas pela primeira vez aqui. Rampa na entrada, elevador funcionando e porta do consultório bem larga. Exatamente como o guia indicava!' },
+      { id: 2, author: 'Márcia P.', av: 'MP', date: '2 meses atrás', rating: 4,
+        tags: ['estacionamento'],
+        comment: 'Vaga de estacionamento PcD bem sinalizada logo na entrada do prédio.' },
+    ]
+  },
+  {
+    id: 3, name: 'Praça da Liberdade', cat: 'Praças',
+    addr: 'Bairro Liberdade — São Paulo', dist: '800m',
+    rating: 4.2, n: 8, tags: ['rampa', 'piso_tatil'], emoji: '🌳',
+    reviews: [
+      { id: 1, author: 'Fernanda T.', av: 'FT', date: '1 sem. atrás', rating: 4,
+        tags: ['piso_tatil'],
+        comment: 'Piso tátil bem conservado em toda extensão da praça. Bancos com espaço reservado para cadeirantes. Ótimo para passeios com a família!' },
+    ]
+  },
+  {
+    id: 4, name: 'Café Aroma Especial', cat: 'Restaurantes',
+    addr: 'Rua Oscar Freire, 540 — Jardins', dist: '1,8km',
+    rating: 4.8, n: 34, tags: ['braille', 'libras', 'piso_tatil'], emoji: '☕',
+    reviews: [
+      { id: 1, author: 'Mariana R.', av: 'MR', date: '5 dias atrás', rating: 5,
+        tags: ['braille', 'libras'],
+        comment: 'Como usuária do VoiceOver, adorei o QR code na mesa que direciona ao menu digital totalmente acessível! Cardápio em Braille disponível ao pedir. Atendimento treinado em Libras.' },
+    ]
+  },
+  {
+    id: 5, name: 'Hospital São Lucas', cat: 'Clínicas',
+    addr: 'Rua Vergueiro, 1421 — Vila Mariana', dist: '2,3km',
+    rating: 4.6, n: 47, tags: ['rampa', 'banheiro', 'elevador', 'estacionamento', 'libras', 'audio'], emoji: '🏥',
+    reviews: [
+      { id: 1, author: 'Paulo F.', av: 'PF', date: '1 sem. atrás', rating: 5,
+        tags: ['rampa', 'elevador', 'libras'],
+        comment: 'Hospital completamente acessível. Intérprete de Libras no pronto-socorro, elevadores amplos e corredores largos para cadeirantes. Referência de acessibilidade na cidade!' },
+      { id: 2, author: 'Sofia A.', av: 'SA', date: '3 sem. atrás', rating: 4,
+        tags: ['audio', 'banheiro'],
+        comment: 'Audiodescrição nos elevadores e banheiros adaptados em todos os andares. Muito bem estruturado.' },
+    ]
+  },
+  {
+    id: 6, name: 'Escola Dom Pedro II', cat: 'Escolas',
+    addr: 'Av. Ipiranga, 877 — República', dist: '2,9km',
+    rating: 3.8, n: 6, tags: ['rampa'], emoji: '🏫',
+    reviews: [
+      { id: 1, author: 'Beatriz N.', av: 'BN', date: '2 meses atrás', rating: 3,
+        tags: ['rampa'],
+        comment: 'Tem rampa na entrada mas o interior da escola ainda tem muitas barreiras. O banheiro adaptado existe mas a chave fica com a direção. Precisa melhorar muito.' },
+    ]
+  },
+  {
+    id: 7, name: 'Biblioteca Mário de Andrade', cat: 'Escolas',
+    addr: 'Rua da Consolação, 94 — Centro', dist: '1,5km',
+    rating: 0, n: 0, tags: [], emoji: '📚',
+    reviews: []
+  },
+];
+
+/* ═══════════════════════════════════════════════════════════════════
+   COMPONENTES COMPARTILHADOS
+═══════════════════════════════════════════════════════════════════ */
+
+/** Exibe estrelas — suporta modo interativo para avaliação */
+function Stars({ r, size = 13, interactive = false, onSet }) {
+  const [hov, setHov] = useState(0);
+  const ef = interactive ? (hov || r) : r;
+  return (
+    <span style={{ display: 'inline-flex', gap: 2 }}>
+      {[1, 2, 3, 4, 5].map(i => (
+        <span key={i}
+          onClick={interactive ? () => onSet(i) : undefined}
+          onMouseEnter={interactive ? () => setHov(i) : undefined}
+          onMouseLeave={interactive ? () => setHov(0) : undefined}
+          style={{
+            cursor: interactive ? 'pointer' : 'default',
+            fontSize: size + 4,
+            color: ef >= i ? '#F59E0B' : '#D1D5DB',
+            lineHeight: 1,
+            minWidth: interactive ? 36 : undefined,
+            minHeight: interactive ? 36 : undefined,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            userSelect: 'none',
+          }}>★</span>
+      ))}
+    </span>
+  );
+}
+
+/** Badge colorida de tag de acessibilidade */
+function Tag({ id, small = false }) {
+  const t = TAGS[id];
+  if (!t) return null;
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 3,
+      background: t.bg, color: t.color, border: `1px solid ${t.border}`,
+      borderRadius: 20, padding: small ? '2px 7px' : '4px 10px',
+      fontSize: small ? 10 : 12, fontWeight: 600, whiteSpace: 'nowrap', lineHeight: 1.4,
+    }}>
+      {t.emoji} {t.label}
+    </span>
+  );
+}
+
+/** Indicador percentual de acessibilidade do local */
+function Score({ tags }) {
+  if (!tags.length) return (
+    <span style={{ fontSize: 11, background: '#F3F4F6', color: '#9CA3AF', borderRadius: 8, padding: '2px 8px', fontWeight: 600 }}>
+      Sem dados
+    </span>
+  );
+  const s = Math.min(100, Math.round((tags.length / 8) * 100));
+  const c = s >= 60 ? '#059669' : s >= 30 ? '#D97706' : '#EF4444';
+  return (
+    <span style={{ fontSize: 11, background: c, color: 'white', borderRadius: 8, padding: '2px 8px', fontWeight: 700 }}>
+      {s}%
+    </span>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   TELA 1 — HOME (busca, categorias, lista de locais)
+═══════════════════════════════════════════════════════════════════ */
+function HomeScreen({ places, onPickPlace, q, setQ, cat, setCat }) {
+  const [listening, setListening] = useState(false);
+
+  /** Filtra locais por categoria e texto de busca */
+  const filtered = places.filter(p => {
+    const matchCat = cat === 'Todos' || p.cat === cat;
+    const matchQ = !q ||
+      p.name.toLowerCase().includes(q.toLowerCase()) ||
+      p.addr.toLowerCase().includes(q.toLowerCase()) ||
+      p.cat.toLowerCase().includes(q.toLowerCase());
+    return matchCat && matchQ;
+  });
+
+  /** Ativa reconhecimento de voz nativo do dispositivo */
+  const handleVoice = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SR) {
+      const recognition = new SR();
+      recognition.lang = 'pt-BR';
+      recognition.onstart = () => setListening(true);
+      recognition.onresult = e => { setQ(e.results[0][0].transcript); setListening(false); };
+      recognition.onerror = recognition.onend = () => setListening(false);
+      recognition.start();
+    } else {
+      // Fallback de demo para ambientes sem microfone
+      setListening(true);
+      setTimeout(() => { setListening(false); setQ('clínica'); }, 1800);
+    }
+  };
+
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', background: '#F0F7FF' }}>
+      {/* ── Cabeçalho azul com busca ── */}
+      <div style={{ background: 'linear-gradient(145deg,#1D4ED8,#2563EB)', padding: '14px 18px 26px', color: 'white' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <div>
+            <div style={{ fontSize: 11, opacity: .75, marginBottom: 2 }}>📍 São Paulo, SP</div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Sua localização</div>
+          </div>
+          <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(255,255,255,.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🔔</div>
+        </div>
+
+        <h1 style={{ fontSize: 20, fontWeight: 800, margin: '0 0 3px', letterSpacing: -.3 }}>Guia de Acessibilidade</h1>
+        <p style={{ fontSize: 12, opacity: .8, margin: '0 0 14px' }}>Encontre locais acessíveis próximos</p>
+
+        {/* Campo de busca + botão de voz */}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', background: 'white', borderRadius: 14, padding: '10px 14px', gap: 8 }}>
+            <span style={{ fontSize: 16 }}>🔍</span>
+            <input
+              type="text" value={q} onChange={e => setQ(e.target.value)}
+              placeholder="Buscar local, endereço..."
+              aria-label="Campo de busca de locais"
+              style={{ flex: 1, border: 'none', outline: 'none', fontSize: 13, color: '#111827', background: 'transparent' }}
+            />
+            {q && (
+              <button onClick={() => setQ('')} aria-label="Limpar busca"
+                style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 16, color: '#9CA3AF', padding: 0, lineHeight: 1 }}>✕</button>
+            )}
+          </div>
+          <button onClick={handleVoice} aria-label="Busca por voz (Speech-to-Text)"
+            className={listening ? 'listening' : ''}
+            style={{ width: 46, height: 46, borderRadius: 14, border: 'none', cursor: 'pointer', fontSize: 18, flexShrink: 0, transition: 'all .2s',
+              background: listening ? '#EF4444' : 'rgba(255,255,255,.22)' }}>
+            🎤
+          </button>
+        </div>
+        {listening && <p style={{ fontSize: 11, color: 'rgba(255,255,255,.9)', textAlign: 'center', marginTop: 6 }}>Ouvindo sua voz...</p>}
+      </div>
+
+      {/* ── Filtros de categoria ── */}
+      <div style={{ padding: '14px 16px 6px', overflowX: 'auto' }}>
+        <div style={{ display: 'flex', gap: 8, width: 'max-content' }}>
+          {CATEGORIES.map(c => (
+            <button key={c} onClick={() => setCat(c)} aria-pressed={cat === c}
+              style={{ padding: '8px 16px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, minHeight: 40, transition: 'all .18s',
+                background: cat === c ? '#2563EB' : 'white', color: cat === c ? 'white' : '#6B7280',
+                boxShadow: cat === c ? '0 3px 10px rgba(37,99,235,.35)' : '0 1px 4px rgba(0,0,0,.08)' }}>
+              {c}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Lista de locais ── */}
+      <div style={{ padding: '6px 16px 110px' }}>
+        <p style={{ fontSize: 12, color: '#6B7280', margin: '0 0 10px' }}>
+          {filtered.length} {filtered.length === 1 ? 'local encontrado' : 'locais encontrados'}
+        </p>
+        {filtered.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '40px 20px', background: 'white', borderRadius: 18, boxShadow: '0 2px 8px rgba(0,0,0,.06)' }}>
+            <div style={{ fontSize: 36, marginBottom: 10 }}>🔍</div>
+            <p style={{ fontWeight: 700, color: '#374151', marginBottom: 4 }}>Nada encontrado</p>
+            <p style={{ fontSize: 12, color: '#9CA3AF' }}>Tente buscar com outros termos</p>
+          </div>
+        ) : (
+          filtered.map(p => <PlaceCard key={p.id} p={p} onPick={() => onPickPlace(p)} />)
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Card de local na listagem */
+function PlaceCard({ p, onPick }) {
+  return (
+    <button onClick={onPick} aria-label={`Ver detalhes de ${p.name}`}
+      style={{ width: '100%', background: 'white', borderRadius: 18, padding: 14, marginBottom: 10,
+        border: 'none', cursor: 'pointer', textAlign: 'left', boxShadow: '0 2px 8px rgba(0,0,0,.07)', transition: 'transform .15s' }}
+      onMouseDown={e => e.currentTarget.style.transform = 'scale(.985)'}
+      onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
+      onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+        <div style={{ width: 52, height: 52, borderRadius: 16, background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, flexShrink: 0 }}>
+          {p.emoji}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 3 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#111827', flex: 1, paddingRight: 8, lineHeight: 1.3, margin: 0 }}>{p.name}</h3>
+            <Score tags={p.tags} />
+          </div>
+          <p style={{ fontSize: 11, color: '#6B7280', margin: '0 0 4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            📍 {p.addr} · <span style={{ color: '#2563EB', fontWeight: 600 }}>{p.dist}</span>
+          </p>
+          {p.n > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+              <Stars r={p.rating} size={10} />
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#374151' }}>{p.rating.toFixed(1)}</span>
+              <span style={{ fontSize: 11, color: '#9CA3AF' }}>({p.n})</span>
+            </div>
+          )}
+          {p.tags.length > 0 ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+              {p.tags.slice(0, 3).map(t => <Tag key={t} id={t} small />)}
+              {p.tags.length > 3 && <span style={{ fontSize: 10, color: '#6B7280', alignSelf: 'center' }}>+{p.tags.length - 3}</span>}
+            </div>
+          ) : (
+            <span style={{ fontSize: 11, color: '#9CA3AF', fontStyle: 'italic' }}>Sem avaliações de acessibilidade ainda</span>
+          )}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   TELA 2 — DETALHE DO LOCAL
+═══════════════════════════════════════════════════════════════════ */
+function DetailScreen({ p, onBack, onAddReview }) {
+  const [copied, setCopied] = useState(false);
+  const avg = p.reviews.length
+    ? (p.reviews.reduce((s, r) => s + r.rating, 0) / p.reviews.length).toFixed(1)
+    : null;
+
+  const handleShare = () => {
+    const text = `${p.name} — ${p.addr}`;
+    if (navigator.clipboard) { navigator.clipboard.writeText(text).catch(() => {}); }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  };
+
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', background: '#F0F7FF' }} className="fade-in">
+      {/* ── Cabeçalho ── */}
+      <div style={{ background: 'linear-gradient(145deg,#1D4ED8,#2563EB)', padding: '14px 18px 28px', color: 'white' }}>
+        <button onClick={onBack} aria-label="Voltar à lista"
+          style={{ background: 'rgba(255,255,255,.2)', border: 'none', borderRadius: 10, width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', marginBottom: 12, fontSize: 18 }}>
+          ←
+        </button>
+        <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+          <div style={{ width: 56, height: 56, borderRadius: 18, background: 'rgba(255,255,255,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, flexShrink: 0 }}>
+            {p.emoji}
+          </div>
+          <div style={{ flex: 1 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, background: 'rgba(255,255,255,.25)', borderRadius: 20, padding: '2px 10px' }}>{p.cat}</span>
+            <h2 style={{ fontSize: 18, fontWeight: 800, margin: '6px 0 4px', lineHeight: 1.2 }}>{p.name}</h2>
+            <p style={{ fontSize: 11, opacity: .85, margin: 0 }}>📍 {p.addr}</p>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ padding: '0 14px 110px', marginTop: -14 }}>
+        {/* ── Rating + Ações ── */}
+        <div style={{ background: 'white', borderRadius: 18, padding: 14, marginBottom: 10, boxShadow: '0 3px 12px rgba(0,0,0,.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          {avg ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 30, fontWeight: 800, color: '#111827', lineHeight: 1 }}>{avg}</span>
+              <div>
+                <Stars r={parseFloat(avg)} size={12} />
+                <p style={{ fontSize: 11, color: '#6B7280', margin: '2px 0 0' }}>{p.reviews.length} avaliação{p.reviews.length !== 1 ? 'ões' : ''}</p>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <p style={{ margin: 0, fontWeight: 700, color: '#374151', fontSize: 13 }}>Sem avaliações ainda</p>
+              <p style={{ margin: '2px 0 0', fontSize: 11, color: '#6B7280' }}>Seja o primeiro a avaliar!</p>
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={handleShare} aria-label="Compartilhar endereço" title="Copiar endereço para compartilhar"
+              style={{ width: 40, height: 40, borderRadius: 12, background: '#EFF6FF', border: 'none', cursor: 'pointer', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              🔗
+            </button>
+            <button onClick={onAddReview}
+              style={{ height: 40, padding: '0 14px', borderRadius: 12, background: '#2563EB', border: 'none', color: 'white', cursor: 'pointer', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5 }}>
+              ＋ Avaliar
+            </button>
+          </div>
+        </div>
+        {copied && (
+          <div style={{ background: '#059669', color: 'white', borderRadius: 12, padding: '8px 14px', marginBottom: 10, fontSize: 12, fontWeight: 600 }}>
+            ✓ Endereço copiado para compartilhar!
+          </div>
+        )}
+
+        {/* ── Grid de tags de acessibilidade ── */}
+        <div style={{ background: 'white', borderRadius: 18, padding: 14, marginBottom: 10, boxShadow: '0 3px 12px rgba(0,0,0,.08)' }}>
+          <h3 style={{ fontSize: 14, fontWeight: 700, color: '#111827', margin: '0 0 12px' }}>Recursos de Acessibilidade</h3>
+          {p.tags.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '16px 0' }}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>🏢</div>
+              <p style={{ fontSize: 12, color: '#6B7280' }}>Nenhum recurso registrado.<br />Avalie este local para contribuir!</p>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {Object.entries(TAGS).map(([id, t]) => {
+                const has = p.tags.includes(id);
+                return (
+                  <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 11px', borderRadius: 14, transition: 'all .2s',
+                    border: `1.5px solid ${has ? t.border : '#F3F4F6'}`, background: has ? t.bg : '#FAFAFA', opacity: has ? 1 : .45 }}>
+                    <span style={{ fontSize: 18 }}>{t.emoji}</span>
+                    <div>
+                      <p style={{ fontSize: 10, fontWeight: 700, color: has ? t.color : '#9CA3AF', margin: 0, lineHeight: 1.3 }}>{t.label}</p>
+                      <p style={{ fontSize: 9, color: has ? '#059669' : '#D1D5DB', margin: 0 }}>{has ? '✓ Confirmado' : '✗ Não registrado'}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* ── Avaliações da comunidade ── */}
+        <div style={{ background: 'white', borderRadius: 18, padding: 14, boxShadow: '0 3px 12px rgba(0,0,0,.08)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#111827', margin: 0 }}>Avaliações da Comunidade</h3>
+            <button onClick={onAddReview} style={{ fontSize: 12, color: '#2563EB', fontWeight: 700, border: 'none', background: 'none', cursor: 'pointer' }}>+ Adicionar</button>
+          </div>
+          {p.reviews.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '16px 0' }}>
+              <p style={{ fontSize: 12, color: '#6B7280', marginBottom: 10 }}>Sem avaliações ainda. Seja o primeiro!</p>
+              <button onClick={onAddReview}
+                style={{ padding: '10px 24px', background: '#2563EB', color: 'white', border: 'none', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer', minHeight: 44 }}>
+                Avaliar agora
+              </button>
+            </div>
+          ) : (
+            p.reviews.map((rv, i) => (
+              <div key={rv.id} style={{ paddingBottom: i < p.reviews.length - 1 ? 14 : 0, marginBottom: i < p.reviews.length - 1 ? 14 : 0, borderBottom: i < p.reviews.length - 1 ? '1px solid #F3F4F6' : 'none' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: '#1D4ED8', flexShrink: 0 }}>
+                      {rv.av}
+                    </div>
+                    <div>
+                      <p style={{ fontSize: 12, fontWeight: 700, color: '#111827', margin: 0 }}>{rv.author}</p>
+                      <p style={{ fontSize: 10, color: '#9CA3AF', margin: 0 }}>{rv.date}</p>
+                    </div>
+                  </div>
+                  <Stars r={rv.rating} size={10} />
+                </div>
+                <p style={{ fontSize: 12, color: '#374151', lineHeight: 1.6, margin: '0 0 8px' }}>{rv.comment}</p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {rv.tags.map(t => <Tag key={t} id={t} small />)}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   TELA 3 — FORMULÁRIO DE AVALIAÇÃO
+═══════════════════════════════════════════════════════════════════ */
+function AddReviewScreen({ p, onBack, onSubmit }) {
+  const [rating, setRating] = useState(0);
+  const [selTags, setSelTags] = useState([]);
+  const [comment, setComment] = useState('');
+  const [done, setDone] = useState(false);
+
+  const toggleTag = id => setSelTags(prev => prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id]);
+  const canSend = rating > 0 && comment.trim().length >= 10;
+  const LABELS = ['', 'Péssimo 😔', 'Ruim 😕', 'Regular 😐', 'Bom 😊', 'Excelente! 🤩'];
+
+  const handleSubmit = () => {
+    if (!canSend) return;
+    onSubmit({ rating, tags: selTags, comment: comment.trim() });
+    setDone(true);
+  };
+
+  if (done) return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, background: '#F0F7FF', textAlign: 'center' }} className="fade-in">
+      <div style={{ width: 80, height: 80, borderRadius: '50%', background: '#ECFDF5', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16, fontSize: 40 }}>✅</div>
+      <h2 style={{ fontSize: 20, fontWeight: 800, color: '#111827', margin: '0 0 8px' }}>Avaliação enviada!</h2>
+      <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.7, margin: '0 0 24px' }}>
+        Obrigado por contribuir com a comunidade.<br />
+        Sua avaliação ajuda outras pessoas a encontrar<br />
+        locais acessíveis com segurança.
+      </p>
+      <button onClick={onBack}
+        style={{ padding: '14px 32px', background: '#2563EB', color: 'white', border: 'none', borderRadius: 14, fontSize: 14, fontWeight: 700, cursor: 'pointer', minHeight: 48 }}>
+        Ver o local
+      </button>
+    </div>
+  );
+
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', background: '#F0F7FF' }} className="fade-in">
+      {/* ── Cabeçalho ── */}
+      <div style={{ background: 'linear-gradient(145deg,#1D4ED8,#2563EB)', padding: '14px 18px 22px', color: 'white' }}>
+        <button onClick={onBack} aria-label="Voltar"
+          style={{ background: 'rgba(255,255,255,.2)', border: 'none', borderRadius: 10, width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', marginBottom: 12, fontSize: 18 }}>
+          ←
+        </button>
+        <h2 style={{ fontSize: 18, fontWeight: 800, margin: '0 0 3px' }}>Nova Avaliação</h2>
+        <p style={{ fontSize: 12, opacity: .8, margin: 0 }}>{p.emoji} {p.name}</p>
+      </div>
+
+      <div style={{ padding: '14px 14px 110px' }}>
+        {/* ── Avaliação por estrelas ── */}
+        <div style={{ background: 'white', borderRadius: 18, padding: 16, marginBottom: 10, boxShadow: '0 3px 12px rgba(0,0,0,.08)' }}>
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: '#111827', margin: '0 0 12px' }}>Avaliação geral *</h3>
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <Stars r={rating} size={24} interactive onSet={setRating} />
+          </div>
+          {rating > 0 && (
+            <p style={{ textAlign: 'center', fontSize: 13, color: '#6B7280', margin: '8px 0 0', fontWeight: 600 }}>{LABELS[rating]}</p>
+          )}
+        </div>
+
+        {/* ── Seleção de tags ── */}
+        <div style={{ background: 'white', borderRadius: 18, padding: 16, marginBottom: 10, boxShadow: '0 3px 12px rgba(0,0,0,.08)' }}>
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: '#111827', margin: '0 0 3px' }}>Recursos encontrados</h3>
+          <p style={{ fontSize: 11, color: '#6B7280', margin: '0 0 12px' }}>Selecione todos que você confirma no local</p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {Object.entries(TAGS).map(([id, t]) => {
+              const sel = selTags.includes(id);
+              return (
+                <button key={id} onClick={() => toggleTag(id)} aria-pressed={sel}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 14, cursor: 'pointer', textAlign: 'left', minHeight: 44, transition: 'all .15s',
+                    border: `2px solid ${sel ? t.color : '#E5E7EB'}`, background: sel ? t.bg : 'white' }}>
+                  <span style={{ fontSize: 18 }}>{t.emoji}</span>
+                  <span style={{ fontSize: 11, fontWeight: sel ? 700 : 400, color: sel ? t.color : '#374151', flex: 1, lineHeight: 1.3 }}>{t.label}</span>
+                  {sel && <span style={{ fontSize: 14, color: t.color }}>✓</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── Comentário ── */}
+        <div style={{ background: 'white', borderRadius: 18, padding: 16, marginBottom: 14, boxShadow: '0 3px 12px rgba(0,0,0,.08)' }}>
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: '#111827', margin: '0 0 3px' }}>Seu comentário *</h3>
+          <p style={{ fontSize: 11, color: '#6B7280', margin: '0 0 10px' }}>Descreva sua experiência de acessibilidade (mín. 10 caracteres)</p>
+          <textarea
+            value={comment} onChange={e => setComment(e.target.value)}
+            placeholder="Ex: A rampa de acesso é bem sinalizada e a inclinação está adequada. O banheiro adaptado tem espaço suficiente para manobra da cadeira de rodas..."
+            aria-label="Campo de comentário sobre acessibilidade"
+            style={{ width: '100%', minHeight: 110, padding: 12, borderRadius: 12, fontSize: 13, border: '1.5px solid #E5E7EB', resize: 'vertical', fontFamily: 'inherit', color: '#111827', lineHeight: 1.6 }}
+          />
+          <p style={{ fontSize: 11, textAlign: 'right', margin: '4px 0 0', fontWeight: 600, color: comment.length < 10 ? '#EF4444' : '#059669' }}>
+            {comment.length} chars {comment.length < 10 ? `— faltam ${10 - comment.length}` : '✓'}
+          </p>
+        </div>
+
+        <button onClick={handleSubmit} disabled={!canSend}
+          style={{ width: '100%', padding: 16, border: 'none', borderRadius: 16, fontSize: 15, fontWeight: 800, cursor: canSend ? 'pointer' : 'not-allowed', minHeight: 56, transition: 'all .2s',
+            background: canSend ? '#2563EB' : '#E5E7EB', color: canSend ? 'white' : '#9CA3AF' }}
+          aria-disabled={!canSend}>
+          {canSend ? 'Enviar Avaliação ✓' : 'Preencha os campos obrigatórios'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   APP ROOT — gerencia navegação e estado global
+═══════════════════════════════════════════════════════════════════ */
+function App() {
+  const [places, setPlaces] = useState(INIT_PLACES);
+  const [screen, setScreen] = useState('home');    // 'home' | 'detail' | 'add-review'
+  const [place, setPlace] = useState(null);        // local selecionado
+  const [q, setQ] = useState('');                  // query de busca
+  const [cat, setCat] = useState('Todos');         // categoria ativa
+  const [nav, setNav] = useState('home');          // tab da nav bar
+
+  const goHome = () => { setScreen('home'); setPlace(null); setNav('home'); };
+  const goDetail = p => { setPlace(p); setScreen('detail'); };
+  const goReview = () => setScreen('add-review');
+  const goBack = () => screen === 'add-review' ? setScreen('detail') : goHome();
+
+  const submitReview = ({ rating, tags, comment }) => {
+    const newRv = { id: Date.now(), author: 'Você', av: 'VC', date: 'agora mesmo', rating, tags, comment };
+    const newTags = [...new Set([...place.tags, ...tags])];
+    const newRvs = [newRv, ...place.reviews];
+    const newRating = parseFloat((newRvs.reduce((s, r) => s + r.rating, 0) / newRvs.length).toFixed(1));
+    const updated = { ...place, reviews: newRvs, tags: newTags, rating: newRating, n: newRvs.length };
+    setPlace(updated);
+    setPlaces(prev => prev.map(p => p.id === place.id ? updated : p));
+  };
+
+  const NAV = [
+    { id: 'home', icon: '🏠', label: 'Início' },
+    { id: 'mapa', icon: '🗺️', label: 'Mapa' },
+    { id: 'alertas', icon: '🔔', label: 'Alertas' },
+    { id: 'perfil', icon: '👤', label: 'Perfil' },
+  ];
+
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start',
+      minHeight: '100vh', background: 'linear-gradient(145deg,#0f172a,#1e293b)', padding: '20px 16px',
+      fontFamily: "'Segoe UI',-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif" }}>
+
+      {/* ── Moldura de celular ── */}
+      <div id="phone-frame" style={{ width: 380, height: 820, background: '#F0F7FF', borderRadius: 44, overflow: 'hidden',
+        display: 'flex', flexDirection: 'column',
+        boxShadow: '0 40px 100px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.08), inset 0 1px 0 rgba(255,255,255,.15)' }}>
+
+        {/* Status bar */}
+        <div style={{ background: '#1D4ED8', padding: '12px 22px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+          <span style={{ color: 'white', fontSize: 12, fontWeight: 700 }}>9:41</span>
+          <div style={{ width: 110, height: 20, background: 'rgba(0,0,0,.4)', borderRadius: 14 }} />
+          <span style={{ color: 'white', fontSize: 11 }}>●●● 100%</span>
+        </div>
+
+        {/* Conteúdo da tela */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {screen === 'home' && (
+            <HomeScreen places={places} onPickPlace={goDetail} q={q} setQ={setQ} cat={cat} setCat={setCat} />
+          )}
+          {screen === 'detail' && place && (
+            <DetailScreen p={place} onBack={goBack} onAddReview={goReview} />
+          )}
+          {screen === 'add-review' && place && (
+            <AddReviewScreen p={place} onBack={() => setScreen('detail')} onSubmit={submitReview} />
+          )}
+        </div>
+
+        {/* Bottom navigation bar */}
+        <nav aria-label="Navegação principal" style={{ background: 'white', borderTop: '1px solid #F3F4F6', padding: '6px 0 14px', display: 'flex', flexShrink: 0 }}>
+          {NAV.map(({ id, icon, label }) => (
+            <button key={id} onClick={() => { if (id === 'home') goHome(); setNav(id); }}
+              aria-label={label} aria-current={nav === id ? 'page' : undefined}
+              style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, border: 'none', background: 'none', cursor: 'pointer', padding: '6px 0', minHeight: 44 }}>
+              <span style={{ fontSize: 20 }}>{icon}</span>
+              <span style={{ fontSize: 9, fontWeight: 700, color: nav === id ? '#2563EB' : '#9CA3AF', letterSpacing: .3 }}>{label}</span>
+              {nav === id && <div style={{ width: 16, height: 3, background: '#2563EB', borderRadius: 2 }} />}
+            </button>
+          ))}
+        </nav>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
